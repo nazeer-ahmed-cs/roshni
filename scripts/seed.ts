@@ -93,10 +93,13 @@ const SEED_AREAS: AreaSeed[] = [
 ];
 
 async function main() {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  if (
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    !(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)
+  ) {
     console.error(
       "\n❌ Supabase not configured.\n" +
-        "  Create .env.local from .env.example with your project's URL + anon key first.\n"
+        "  Create .env.local from .env.example with your project's URL + anon/publishable key first.\n"
     );
     process.exit(1);
   }
