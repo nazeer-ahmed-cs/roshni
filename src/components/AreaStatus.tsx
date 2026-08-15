@@ -12,6 +12,7 @@ import { useAreas } from "@/lib/useAreas";
 import AreaSelect from "./AreaSelect";
 import { formatClock, formatDurationMinutes, timeAgo } from "@/lib/time";
 import { clearStoredSubscription, getStoredSubscription, subscribeToPush } from "@/lib/push";
+import { findOngoingOutage, predictOutageDuration, type Prediction } from "@/lib/predictions";
 import SupabaseNotice from "./SupabaseNotice";
 
 const WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -21,8 +22,17 @@ type Segment = { from: number; to: number; status: ReportStatus };
 type Result =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "none" }
-  | { status: "loaded"; current: ReportStatus; segments: Segment[]; outageMs: number; reports: Report[] };
+  | { status: "empty" }
+  | { status: "none"; prediction: Prediction }
+  | {
+      status: "loaded";
+      current: ReportStatus;
+      segments: Segment[];
+      outageMs: number;
+      reports: Report[];
+      windowReports: number;
+      prediction: Prediction;
+    };
 
 type Notify =
   | { status: "idle" }
@@ -57,19 +67,18 @@ export default function AreaStatus() {
     setResult({ status: "loading" });
 
     try {
-      const fromIso = new Date(Date.now() - WINDOW_MS).toISOString();
       const { data, error: err } = await getSupabase()
         .from("reports")
         .select("id, area, city, area_id, status, created_at")
         .eq("area_id", area.id)
-        .gte("created_at", fromIso)
         .order("created_at", { ascending: true })
         .limit(500);
       if (err) throw err;
 
       const reports = (data ?? []) as Report[];
+      const prediction = predictOutageDuration(reports);
       if (reports.length === 0) {
-        setResult({ status: "none" });
+        setResult({ status: "empty" });
         return;
       }
 
@@ -78,6 +87,11 @@ export default function AreaStatus() {
         .map((r) => ({ t: new Date(r.created_at).getTime(), status: r.status }))
         .filter((p) => p.t >= now - WINDOW_MS)
         .sort((a, b) => a.t - b.t);
+
+      if (points.length === 0) {
+        setResult({ status: "none", prediction });
+        return;
+      }
 
       const segments: Segment[] = [];
       for (let i = 0; i < points.length - 1; i++) {
@@ -102,11 +116,13 @@ export default function AreaStatus() {
         segments,
         outageMs,
         reports,
+        windowReports: points.length,
+        prediction,
       });
     } catch (e) {
       console.error(e);
       setError("Check nahi hua — network check karo");
-      setResult({ status: "none" });
+      setResult({ status: "idle" });
     }
   }, [area]);
 
@@ -217,11 +233,20 @@ export default function AreaStatus() {
         <p className="py-8 text-center text-sm text-neutral-500">Checking...</p>
       )}
 
-      {result.status === "none" && (
+      {result.status === "empty" && (
         <p className="rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-400">
-          Pichle 24 ghante me is area ka koi report nahi.{" "}
-          <span className="text-neutral-600">Pehla report tum karo!</span>
+          No history yet for this area.
         </p>
+      )}
+
+      {result.status === "none" && (
+        <>
+          <p className="rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-400">
+            Pichle 24 ghante me is area ka koi report nahi.{" "}
+            <span className="text-neutral-600">Pehla report tum karo!</span>
+          </p>
+          <PredictionCard prediction={result.prediction} />
+        </>
       )}
 
       {result.status === "loaded" && (
@@ -299,8 +324,8 @@ export default function AreaStatus() {
                 <p className="text-neutral-500">segments</p>
               </div>
               <div>
-                <p className="font-bold text-neutral-200">{result.reports.length}</p>
-                <p className="text-neutral-500">reports</p>
+                <p className="font-bold text-neutral-200">{result.windowReports}</p>
+                <p className="text-neutral-500">reports · 24h</p>
               </div>
             </div>
             <p className="mt-3 text-[11px] leading-relaxed text-neutral-600">
@@ -308,6 +333,104 @@ export default function AreaStatus() {
               last 24h is shown.
             </p>
           </div>
+
+          <PredictionCard
+            prediction={result.prediction}
+            areaName={area?.area_name}
+            current={result.current}
+            reports={result.reports}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+function formatCount(n: number): string {
+  return `${n} report${n === 1 ? "" : "s"}`;
+}
+
+function notEnoughDataMessage(sampleSize: number): string {
+  if (sampleSize === 0) return "Not enough data yet — no completed outages so far.";
+  return `Not enough data yet — ${formatCount(sampleSize)} so far.`;
+}
+
+type PredictionCardProps = {
+  prediction: Prediction;
+  areaName?: string;
+  current?: ReportStatus;
+  reports?: Report[];
+};
+
+function PredictionCard({ prediction, areaName, current, reports = [] }: PredictionCardProps) {
+  const ongoing = current === "power_out" ? findOngoingOutage(reports) : null;
+  const remainingMinutes =
+    ongoing && prediction.hasEnoughData && prediction.avgDurationMinutes != null
+      ? Math.round(prediction.avgDurationMinutes - ongoing.elapsedMinutes)
+      : null;
+
+  return (
+    <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold uppercase tracking-widest text-neutral-400">
+          Outage prediction
+        </p>
+        {areaName && <span className="text-xs text-neutral-600">{areaName}</span>}
+      </div>
+
+      {prediction.sampleSize === 0 ? (
+        <p className="mt-2 text-sm text-neutral-400">{notEnoughDataMessage(0)}</p>
+      ) : !prediction.hasEnoughData ? (
+        <p className="mt-2 text-sm text-neutral-400">{notEnoughDataMessage(prediction.sampleSize)}</p>
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-neutral-200">
+            Outages here usually last{" "}
+            <span className="font-bold text-neutral-100">
+              ~{formatDurationMinutes(prediction.avgDurationMinutes ?? 0)}
+            </span>{" "}
+            <span className="text-neutral-500">(based on {formatCount(prediction.sampleSize)})</span>
+          </p>
+
+          {remainingMinutes != null && ongoing && (
+            <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">
+                ⏳ Estimate
+              </p>
+              <p className="text-sm text-amber-200">
+                {remainingMinutes > 0
+                  ? `Power likely back in ~${formatDurationMinutes(remainingMinutes)}`
+                  : "Should be back around now"}
+                <span className="text-amber-400/70">
+                  {" "}
+                  (typical {formatDurationMinutes(prediction.avgDurationMinutes ?? 0)},{" "}
+                  {formatDurationMinutes(Math.round(ongoing.elapsedMinutes))} in so far)
+                </span>
+              </p>
+              <p className="mt-1 text-[11px] text-amber-400/60">
+                Estimate only — not a guarantee.
+              </p>
+            </div>
+          )}
+
+          {prediction.byTimeOfDay && prediction.byTimeOfDay.length > 0 && (
+            <div className="mt-3 border-t border-neutral-800 pt-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                By time of day
+              </p>
+              <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                {prediction.byTimeOfDay.map((b) => (
+                  <div key={b.bucket} className="flex items-baseline justify-between">
+                    <span className="text-neutral-500">{b.label}</span>
+                    <span className="text-neutral-200">
+                      ~{formatDurationMinutes(b.avgDurationMinutes)}{" "}
+                      <span className="text-neutral-600">({b.sampleSize})</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
