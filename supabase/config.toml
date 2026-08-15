@@ -1,0 +1,4 @@
+project_id = "your-project-ref"
+
+[functions.notify-power-back]
+verify_jwt = false

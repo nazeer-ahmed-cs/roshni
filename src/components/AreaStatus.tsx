@@ -11,6 +11,7 @@ import {
 import { useAreas } from "@/lib/useAreas";
 import AreaSelect from "./AreaSelect";
 import { formatClock, formatDurationMinutes, timeAgo } from "@/lib/time";
+import { clearStoredSubscription, getStoredSubscription, subscribeToPush } from "@/lib/push";
 import SupabaseNotice from "./SupabaseNotice";
 
 const WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -23,12 +24,20 @@ type Result =
   | { status: "none" }
   | { status: "loaded"; current: ReportStatus; segments: Segment[]; outageMs: number; reports: Report[] };
 
+type Notify =
+  | { status: "idle" }
+  | { status: "subscribing" }
+  | { status: "subscribed" }
+  | { status: "denied"; message?: string }
+  | { status: "error"; message?: string };
+
 export default function AreaStatus() {
   const { areas, cities, loading, error: areasError, reload } = useAreas();
   const [city, setCity] = useState("");
   const [area, setArea] = useState<Area | null>(null);
   const [result, setResult] = useState<Result>({ status: "idle" });
   const [error, setError] = useState<string | null>(null);
+  const [notify, setNotify] = useState<Notify>({ status: "idle" });
 
   useEffect(() => {
     if (!city && cities.length > 0) setCity(cities[0]);
@@ -98,6 +107,30 @@ export default function AreaStatus() {
       console.error(e);
       setError("Check nahi hua — network check karo");
       setResult({ status: "none" });
+    }
+  }, [area]);
+
+  useEffect(() => {
+    if (result.status === "loaded" && area) {
+      if (result.current === "power_back") {
+        clearStoredSubscription(area.id);
+        setNotify({ status: "idle" });
+      } else {
+        setNotify({ status: getStoredSubscription(area.id) ? "subscribed" : "idle" });
+      }
+    }
+  }, [result, area]);
+
+  const handleNotify = useCallback(async () => {
+    if (!area) return;
+    setNotify({ status: "subscribing" });
+    const res = await subscribeToPush(area.id);
+    if (res.ok) {
+      setNotify({ status: "subscribed" });
+    } else if (res.reason === "denied") {
+      setNotify({ status: "denied", message: res.message });
+    } else {
+      setNotify({ status: "error", message: res.message });
     }
   }, [area]);
 
@@ -214,6 +247,25 @@ export default function AreaStatus() {
               Latest report {timeAgo(result.reports[result.reports.length - 1].created_at)}
             </p>
           </div>
+
+          {result.current === "power_out" && (
+            <div className="space-y-2">
+              <button
+                onClick={handleNotify}
+                disabled={notify.status === "subscribed" || notify.status === "subscribing"}
+                className="w-full rounded-xl border border-neutral-700 bg-neutral-900 py-3 font-semibold text-neutral-100 transition active:scale-[.99] disabled:opacity-60"
+              >
+                {notify.status === "subscribed"
+                  ? "🔔 We'll notify you"
+                  : notify.status === "subscribing"
+                  ? "Subscribing..."
+                  : "🔔 Notify me when power's back"}
+              </button>
+              {(notify.status === "denied" || notify.status === "error") && (
+                <p className="text-center text-xs text-neutral-500">{notify.message}</p>
+              )}
+            </div>
+          )}
 
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
             <div className="flex items-center justify-between text-xs text-neutral-500">
