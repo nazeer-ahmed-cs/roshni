@@ -1,24 +1,33 @@
 "use client";
 
-import { useState } from "react";
-import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
-import { CITIES, SAMPLE_AREAS } from "@/lib/constants";
+import { useEffect, useMemo, useState } from "react";
+import { getSupabase, isSupabaseConfigured, type Area, type ReportStatus } from "@/lib/supabase";
+import { useAreas } from "@/lib/useAreas";
+import AreaSelect from "./AreaSelect";
+import AreaSuggest from "./AreaSuggest";
 import SupabaseNotice from "./SupabaseNotice";
 
-type ReportStatus = "power_out" | "power_back";
-
 export default function ReportForm() {
-  const [city, setCity] = useState("Sukkur");
-  const [area, setArea] = useState("");
+  const { areas, cities, loading, error: areasError, reload } = useAreas();
+  const [city, setCity] = useState("");
+  const [area, setArea] = useState<Area | null>(null);
   const [submitting, setSubmitting] = useState<ReportStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showSuggest, setShowSuggest] = useState(false);
   const [confirmed, setConfirmed] = useState<{
     area: string;
     city: string;
     status: ReportStatus;
   } | null>(null);
 
-  const areas = SAMPLE_AREAS[city] ?? [];
+  useEffect(() => {
+    if (!city && cities.length > 0) setCity(cities[0]);
+  }, [cities, city]);
+
+  const cityAreas = useMemo(
+    () => areas.filter((a) => a.city === city).sort((a, b) => a.area_name.localeCompare(b.area_name)),
+    [areas, city]
+  );
 
   function reset() {
     setConfirmed(null);
@@ -26,9 +35,8 @@ export default function ReportForm() {
   }
 
   async function submit(status: ReportStatus) {
-    const trimmed = area.trim();
-    if (!trimmed) {
-      setError("Pehle apna area likho (e.g. Military Road)");
+    if (!area) {
+      setError("Pehle apna area choose karo (e.g. Military Road)");
       return;
     }
     setError(null);
@@ -37,10 +45,10 @@ export default function ReportForm() {
     try {
       await getSupabase()
         .from("reports")
-        .insert({ area: trimmed, city, status })
+        .insert({ area_id: area.id, area: area.area_name, city, status })
         .select()
         .single();
-      setConfirmed({ area: trimmed, city, status });
+      setConfirmed({ area: area.area_name, city, status });
     } catch (e) {
       console.error(e);
       setError("Submit fail hua — network check karo aur dobara try karo");
@@ -59,8 +67,7 @@ export default function ReportForm() {
           </h2>
           <p className="mt-2 text-sm text-neutral-300">
             <span className="font-semibold text-neutral-100">{confirmed.area}</span>,{" "}
-            {confirmed.city} —{" "}
-            {confirmed.status === "power_out" ? "power out" : "power back"}
+            {confirmed.city} — {confirmed.status === "power_out" ? "power out" : "power back"}
           </p>
         </div>
         <button
@@ -77,18 +84,34 @@ export default function ReportForm() {
     return <SupabaseNotice />;
   }
 
+  if (loading) {
+    return <p className="py-8 text-center text-sm text-neutral-500">Loading areas...</p>;
+  }
+
   return (
     <div className="space-y-4">
+      {areasError && (
+        <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          {areasError}{" "}
+          <button onClick={reload} className="font-semibold underline">
+            Retry
+          </button>
+        </p>
+      )}
+
       <div>
         <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-400">
           City
         </label>
         <select
           value={city}
-          onChange={(e) => setCity(e.target.value)}
+          onChange={(e) => {
+            setCity(e.target.value);
+            setArea(null);
+          }}
           className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-neutral-100 outline-none focus:border-green-500"
         >
-          {CITIES.map((c) => (
+          {cities.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
@@ -100,20 +123,24 @@ export default function ReportForm() {
         <label htmlFor="area" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-400">
           Area / Mohalla
         </label>
-        <input
+        <AreaSelect
           id="area"
-          list="area-suggestions"
+          areas={cityAreas}
           value={area}
-          onChange={(e) => setArea(e.target.value)}
-          placeholder={areas.length ? "e.g. " + areas[0] : "Type any area name"}
-          className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-green-500"
+          onChange={setArea}
+          placeholder={cityAreas.length ? "Search area..." : "Is city me abhi koi area nahi"}
         />
-        <datalist id="area-suggestions">
-          {areas.map((a) => (
-            <option key={a} value={a} />
-          ))}
-        </datalist>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setShowSuggest((s) => !s)}
+        className="w-full rounded-lg border border-dashed border-neutral-700 py-2 text-xs font-semibold text-neutral-400 hover:border-neutral-600 hover:text-neutral-300"
+      >
+        {showSuggest ? "Close" : "➕ Apna area nahi mila? Suggest karo"}
+      </button>
+
+      {showSuggest && <AreaSuggest cities={cities} />}
 
       {error && (
         <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
@@ -124,14 +151,14 @@ export default function ReportForm() {
       <div className="space-y-3">
         <button
           onClick={() => submit("power_out")}
-          disabled={submitting !== null}
+          disabled={submitting !== null || !area}
           className="w-full rounded-2xl bg-red-600 py-5 text-lg font-bold text-white shadow-lg shadow-red-950/50 transition active:scale-[.98] disabled:opacity-50"
         >
           {submitting === "power_out" ? "Submitting..." : "⚡ Power Went Out"}
         </button>
         <button
           onClick={() => submit("power_back")}
-          disabled={submitting !== null}
+          disabled={submitting !== null || !area}
           className="w-full rounded-2xl bg-green-600 py-5 text-lg font-bold text-white shadow-lg shadow-green-950/50 transition active:scale-[.98] disabled:opacity-50"
         >
           {submitting === "power_back" ? "Submitting..." : "✅ Power Came Back"}

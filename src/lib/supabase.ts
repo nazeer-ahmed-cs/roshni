@@ -6,7 +6,25 @@ export type Report = {
   id: number;
   area: string;
   city: string;
+  area_id: string | null;
   status: ReportStatus;
+  created_at: string;
+};
+
+export type Area = {
+  id: string;
+  city: string;
+  disco: string;
+  area_name: string;
+  slug: string;
+};
+
+export type AreaSuggestion = {
+  id: string;
+  city: string;
+  disco: string | null;
+  area_name: string;
+  status: "pending" | "approved" | "rejected";
   created_at: string;
 };
 

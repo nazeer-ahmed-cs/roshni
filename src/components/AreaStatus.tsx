@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { getSupabase, isSupabaseConfigured, type Report, type ReportStatus } from "@/lib/supabase";
-import { CITIES, SAMPLE_AREAS } from "@/lib/constants";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  getSupabase,
+  isSupabaseConfigured,
+  type Area,
+  type Report,
+  type ReportStatus,
+} from "@/lib/supabase";
+import { useAreas } from "@/lib/useAreas";
+import AreaSelect from "./AreaSelect";
 import { formatClock, formatDurationMinutes, timeAgo } from "@/lib/time";
 import SupabaseNotice from "./SupabaseNotice";
 
@@ -17,17 +24,24 @@ type Result =
   | { status: "loaded"; current: ReportStatus; segments: Segment[]; outageMs: number; reports: Report[] };
 
 export default function AreaStatus() {
-  const [city, setCity] = useState("Sukkur");
-  const [area, setArea] = useState("");
+  const { areas, cities, loading, error: areasError, reload } = useAreas();
+  const [city, setCity] = useState("");
+  const [area, setArea] = useState<Area | null>(null);
   const [result, setResult] = useState<Result>({ status: "idle" });
   const [error, setError] = useState<string | null>(null);
 
-  const areas = SAMPLE_AREAS[city] ?? [];
+  useEffect(() => {
+    if (!city && cities.length > 0) setCity(cities[0]);
+  }, [cities, city]);
+
+  const cityAreas = useMemo(
+    () => areas.filter((a) => a.city === city).sort((a, b) => a.area_name.localeCompare(b.area_name)),
+    [areas, city]
+  );
 
   const check = useCallback(async () => {
-    const trimmed = area.trim();
-    if (!trimmed) {
-      setError("Pehle area likho (e.g. Military Road)");
+    if (!area) {
+      setError("Pehle area choose karo (e.g. Military Road)");
       return;
     }
     setError(null);
@@ -37,9 +51,8 @@ export default function AreaStatus() {
       const fromIso = new Date(Date.now() - WINDOW_MS).toISOString();
       const { data, error: err } = await getSupabase()
         .from("reports")
-        .select("id, area, city, status, created_at")
-        .eq("city", city)
-        .eq("area", trimmed)
+        .select("id, area, city, area_id, status, created_at")
+        .eq("area_id", area.id)
         .gte("created_at", fromIso)
         .order("created_at", { ascending: true })
         .limit(500);
@@ -86,14 +99,27 @@ export default function AreaStatus() {
       setError("Check nahi hua — network check karo");
       setResult({ status: "none" });
     }
-  }, [area, city]);
+  }, [area]);
 
   if (!isSupabaseConfigured) {
     return <SupabaseNotice />;
   }
 
+  if (loading) {
+    return <p className="py-8 text-center text-sm text-neutral-500">Loading areas...</p>;
+  }
+
   return (
     <div className="space-y-4">
+      {areasError && (
+        <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          {areasError}{" "}
+          <button onClick={reload} className="font-semibold underline">
+            Retry
+          </button>
+        </p>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-400">
@@ -103,11 +129,12 @@ export default function AreaStatus() {
             value={city}
             onChange={(e) => {
               setCity(e.target.value);
+              setArea(null);
               setResult({ status: "idle" });
             }}
             className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-3 text-neutral-100 outline-none focus:border-green-500"
           >
-            {CITIES.map((c) => (
+            {cities.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
@@ -118,28 +145,22 @@ export default function AreaStatus() {
           <label htmlFor="area-check" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-400">
             Area
           </label>
-          <input
+          <AreaSelect
             id="area-check"
-            list="area-check-suggestions"
+            areas={cityAreas}
             value={area}
-            onChange={(e) => {
-              setArea(e.target.value);
+            onChange={(a) => {
+              setArea(a);
               setResult({ status: "idle" });
             }}
-            placeholder="e.g. Military Road"
-            className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-3 text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-green-500"
+            placeholder="Search area..."
           />
-          <datalist id="area-check-suggestions">
-            {areas.map((a) => (
-              <option key={a} value={a} />
-            ))}
-          </datalist>
         </div>
       </div>
 
       <button
         onClick={check}
-        disabled={result.status === "loading"}
+        disabled={result.status === "loading" || !area}
         className="w-full rounded-xl bg-neutral-100 py-3 font-bold text-neutral-900 transition active:scale-[.99] disabled:opacity-50"
       >
         {result.status === "loading" ? "Checking..." : "📍 Check karo"}
@@ -154,7 +175,7 @@ export default function AreaStatus() {
       {result.status === "idle" && (
         <div className="rounded-xl border border-dashed border-neutral-700 p-8 text-center text-sm text-neutral-500">
           <div className="text-3xl">📍</div>
-          <p className="mt-2">Area type karo aur Check karo.</p>
+          <p className="mt-2">Area choose karo aur Check karo.</p>
           <p>Pichle 24 ghante ki reports se timeline banegi.</p>
         </div>
       )}
@@ -180,7 +201,7 @@ export default function AreaStatus() {
             }`}
           >
             <p className="text-xs font-bold uppercase tracking-widest text-neutral-400">
-              Currently · {area} · {city}
+              Currently · {area?.area_name} · {city}
             </p>
             <p
               className={`mt-1 text-2xl font-black ${
