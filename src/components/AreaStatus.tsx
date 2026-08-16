@@ -187,7 +187,7 @@ export default function AreaStatus() {
               setArea(null);
               setResult({ status: "idle" });
             }}
-            className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-3 text-neutral-100 outline-none focus:border-green-500"
+            className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-3 text-neutral-100 outline-none focus:border-amber-400"
           >
             {cities.map((c) => (
               <option key={c} value={c}>
@@ -258,10 +258,10 @@ export default function AreaStatus() {
       {result.status === "loaded" && (
         <>
           <div
-            className={`rounded-2xl p-4 text-center ${
+            className={`rounded-2xl p-4 text-center shadow-lg ${
               result.current === "power_out"
-                ? "border border-red-500/50 bg-red-500/15"
-                : "border border-green-500/50 bg-green-500/15"
+                ? "border border-red-500/50 bg-red-500/15 shadow-red-500/10"
+                : "border border-green-500/50 bg-green-500/15 shadow-green-500/10"
             }`}
           >
             <p className="text-xs font-bold uppercase tracking-widest text-neutral-400">

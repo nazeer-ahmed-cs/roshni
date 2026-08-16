@@ -53,7 +53,7 @@ export default function AreaSuggest({ cities }: { cities: string[] }) {
         <select
           value={city}
           onChange={(e) => setCity(e.target.value)}
-          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 outline-none focus:border-green-500"
+          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 outline-none focus:border-amber-400"
         >
           {cities.map((c) => (
             <option key={c} value={c}>
@@ -66,7 +66,7 @@ export default function AreaSuggest({ cities }: { cities: string[] }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Area ka naam"
-          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-green-500"
+          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-amber-400"
         />
       </div>
       {error && <p className="text-xs text-red-300">{error}</p>}

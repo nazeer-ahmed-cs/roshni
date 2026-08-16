@@ -109,7 +109,7 @@ export default function ReportForm() {
             setCity(e.target.value);
             setArea(null);
           }}
-          className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-neutral-100 outline-none focus:border-green-500"
+          className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-neutral-100 outline-none focus:border-amber-400"
         >
           {cities.map((c) => (
             <option key={c} value={c}>
@@ -152,16 +152,28 @@ export default function ReportForm() {
         <button
           onClick={() => submit("power_out")}
           disabled={submitting !== null || !area}
-          className="w-full rounded-2xl bg-red-600 py-5 text-lg font-bold text-white shadow-lg shadow-red-950/50 transition active:scale-[.98] disabled:opacity-50"
+          className="w-full rounded-2xl bg-red-500 py-5 text-lg font-bold text-white shadow-lg shadow-red-500/40 transition hover:brightness-110 active:scale-[.98] active:brightness-95 disabled:opacity-50"
         >
-          {submitting === "power_out" ? "Submitting..." : "⚡ Power Went Out"}
+          {submitting === "power_out" ? (
+            "Submitting..."
+          ) : (
+            <>
+              <span className="text-xl leading-none align-[-2px]">⚡</span> Power Went Out
+            </>
+          )}
         </button>
         <button
           onClick={() => submit("power_back")}
           disabled={submitting !== null || !area}
-          className="w-full rounded-2xl bg-green-600 py-5 text-lg font-bold text-white shadow-lg shadow-green-950/50 transition active:scale-[.98] disabled:opacity-50"
+          className="w-full rounded-2xl bg-green-600 py-5 text-lg font-bold text-white shadow-lg shadow-green-500/40 transition hover:brightness-110 active:scale-[.98] active:brightness-95 disabled:opacity-50"
         >
-          {submitting === "power_back" ? "Submitting..." : "✅ Power Came Back"}
+          {submitting === "power_back" ? (
+            "Submitting..."
+          ) : (
+            <>
+              <span className="text-xl leading-none align-[-2px]">✅</span> Power Came Back
+            </>
+          )}
         </button>
       </div>
 

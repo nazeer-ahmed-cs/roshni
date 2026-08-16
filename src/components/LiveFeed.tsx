@@ -130,7 +130,7 @@ export default function LiveFeed() {
               className="flex items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-3"
             >
               <span
-                className={`flex h-10 w-10 flex-none items-center justify-center rounded-full text-lg ${
+                className={`flex h-10 w-10 flex-none items-center justify-center rounded-full text-xl ${
                   r.status === "power_out"
                     ? "bg-red-500/15 text-red-400"
                     : "bg-green-500/15 text-green-400"

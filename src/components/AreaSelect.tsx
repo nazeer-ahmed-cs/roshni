@@ -93,7 +93,7 @@ export default function AreaSelect({ areas, value, onChange, id, placeholder }: 
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         autoComplete="off"
-        className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3 pr-10 text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-green-500"
+        className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3 pr-10 text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-amber-400"
       />
 
       {value && (

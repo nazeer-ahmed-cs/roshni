@@ -60,7 +60,7 @@ export default function OutageStatsBanner() {
   }
 
   return (
-    <p className="rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-2.5 text-center text-xs text-neutral-300">
+    <p className="rounded-xl border border-amber-500/20 bg-neutral-900/60 px-4 py-2.5 text-center text-xs text-neutral-300">
       <span className="font-bold text-amber-400">⚡ {stats.areasOut} areas</span> currently
       reporting outages · {stats.areasTracked} total areas tracked
     </p>
