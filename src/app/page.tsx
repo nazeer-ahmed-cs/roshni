@@ -4,6 +4,7 @@ import { useState } from "react";
 import ReportForm from "@/components/ReportForm";
 import LiveFeed from "@/components/LiveFeed";
 import AreaStatus from "@/components/AreaStatus";
+import OutageStatsBanner from "@/components/OutageStatsBanner";
 
 type TabId = "report" | "feed" | "area";
 
@@ -30,9 +31,12 @@ export default function Home() {
 
       {/* Content */}
       <main className="flex-1 px-5 py-5 pb-28">
-        {tab === "report" && <ReportForm />}
-        {tab === "feed" && <LiveFeed />}
-        {tab === "area" && <AreaStatus />}
+        <OutageStatsBanner />
+        <div className="mt-4">
+          {tab === "report" && <ReportForm />}
+          {tab === "feed" && <LiveFeed />}
+          {tab === "area" && <AreaStatus />}
+        </div>
       </main>
 
       {/* Sticky bottom nav */}

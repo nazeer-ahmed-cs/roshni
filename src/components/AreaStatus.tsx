@@ -13,6 +13,7 @@ import AreaSelect from "./AreaSelect";
 import { formatClock, formatDurationMinutes, timeAgo } from "@/lib/time";
 import { clearStoredSubscription, getStoredSubscription, subscribeToPush } from "@/lib/push";
 import { findOngoingOutage, predictOutageDuration, type Prediction } from "@/lib/predictions";
+import { computeAgreement } from "@/lib/trust";
 import SupabaseNotice from "./SupabaseNotice";
 
 const WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -48,6 +49,11 @@ export default function AreaStatus() {
   const [result, setResult] = useState<Result>({ status: "idle" });
   const [error, setError] = useState<string | null>(null);
   const [notify, setNotify] = useState<Notify>({ status: "idle" });
+
+  const agreement = useMemo(() => {
+    if (result.status !== "loaded") return null;
+    return computeAgreement(result.reports);
+  }, [result]);
 
   useEffect(() => {
     if (!city && cities.length > 0) setCity(cities[0]);
@@ -268,6 +274,11 @@ export default function AreaStatus() {
             >
               {result.current === "power_out" ? "⚡ POWER OUT" : "💡 POWER ON"}
             </p>
+            {agreement?.verified && agreement.status === result.current && (
+              <p className="mt-2 inline-flex items-center gap-1 rounded-full border border-green-500/40 bg-green-500/10 px-2.5 py-0.5 text-[11px] font-bold text-green-300">
+                ✓ Verified · {agreement.count} reports agree
+              </p>
+            )}
             <p className="mt-1 text-xs text-neutral-400">
               Latest report {timeAgo(result.reports[result.reports.length - 1].created_at)}
             </p>

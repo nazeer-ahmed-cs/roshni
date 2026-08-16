@@ -170,3 +170,50 @@ drop trigger if exists reports_notify_power_back on public.reports;
 create trigger reports_notify_power_back
 after insert on public.reports
 for each row execute function public.notify_power_back_webhook();
+
+-- =====================================================================
+-- Report flags — lightweight "this report may be wrong" signal
+-- =====================================================================
+
+-- Anonymous users may INSERT only; no client-side select for now. Admin review
+-- (if added later) would use the service key / an RLS-restricted select policy.
+-- Note: reports.id is bigint (identity), not uuid, so the FK is bigint.
+create table if not exists public.report_flags (
+  id uuid primary key default gen_random_uuid(),
+  report_id bigint references public.reports (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+alter table public.report_flags enable row level security;
+
+drop policy if exists "report_flags_insert_anon" on public.report_flags;
+create policy "report_flags_insert_anon" on public.report_flags
+  for insert to anon
+  with check (true);
+
+create index if not exists report_flags_report_id_idx on public.report_flags (report_id);
+
+-- =====================================================================
+-- Live nationwide counter — "X areas currently reporting outages"
+-- =====================================================================
+
+-- Latest status per area, then tally how many show power_out vs total distinct
+-- areas with any reports. Called from the client via
+--   select * from current_outage_counts();
+-- Returns jsonb: { "areas_out": int, "areas_tracked": int }
+create or replace function public.current_outage_counts()
+returns jsonb
+language sql
+stable
+as $$
+  select jsonb_build_object(
+    'areas_out', count(*) filter (where latest.status = 'power_out'),
+    'areas_tracked', count(latest.area_id)
+  )
+  from (
+    select distinct on (area_id) area_id, status
+    from public.reports
+    where area_id is not null
+    order by area_id, created_at desc
+  ) latest;
+$$;
